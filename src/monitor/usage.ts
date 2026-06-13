@@ -63,10 +63,14 @@ export class UsageMonitor {
   // ===== 惰性初始化 + Token 状态追踪 =====
 
   private async _initClient(): Promise<void> {
-    const token = await this.context.secrets.get('deepseek.platformToken');
-    if (!token) return;
-    this._client = new PlatformClient(token);
-    this._hasToken = true;
+    try {
+      const token = await this.context.secrets.get('deepseek.platformToken');
+      if (!token) return;
+      this._client = new PlatformClient(token);
+      this._hasToken = true;
+    } catch (error) {
+      console.error('UsageMonitor._initClient failed:', error);
+    }
   }
 
   // ===== Token 管理（通过 SecretStorage 加密存储） =====

@@ -50,8 +50,8 @@ export function activate(context: vscode.ExtensionContext) {
         await balanceMonitor.refreshBalance();
         await usageMonitor.refresh();
 
-        // Step 2: 更新状态栏
-        await updateStatusBar(balanceMonitor, usageMonitor);
+        // Step 2: 更新状态栏（直接传最新余额，避免 refreshBalance 二次调用）
+        await updateStatusBar(balanceMonitor, usageMonitor, balanceMonitor.currentBalance);
 
         // Step 3: 如果面板已打开，同步更新面板视图
         if (UsageDashboardPanel.currentPanel) {
@@ -122,9 +122,10 @@ export function deactivate() {
 async function updateStatusBar(
     balanceMonitor: BalanceMonitor,
     usageMonitor?: UsageMonitor,
+    cachedBalance?: number,
 ): Promise<void> {
     try {
-        const balance = await balanceMonitor.refreshBalance();
+        const balance = cachedBalance !== undefined ? cachedBalance : await balanceMonitor.refreshBalance();
         const config = vscode.workspace.getConfiguration('deepseek');
         const apiKey: string = config.get<string>('apiKey') || '';
 
