@@ -64,8 +64,8 @@ export function activate(context: vscode.ExtensionContext) {
     scheduler = new RefreshScheduler(refreshCallback, interval);
     scheduler.start();
 
-    // 初始更新
-    refreshCallback();
+    // 初始更新（fire-and-forget，错误由内部捕获）
+    refreshCallback().catch(console.error);
 
     // 监听配置变更
     context.subscriptions.push(
