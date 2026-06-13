@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { BalanceMonitor } from './monitor/balance';
+import { UsageMonitor } from './monitor/usage';
 import { RefreshScheduler } from './scheduler/scheduler';
+import { UsageDashboardPanel } from './webview/panel';
 
 let statusBarItem: vscode.StatusBarItem;
 let scheduler: RefreshScheduler | undefined;
@@ -12,23 +14,32 @@ export function activate(context: vscode.ExtensionContext) {
         100
     );
     statusBarItem.name = 'DeepSeek Usage Monitor';
-    statusBarItem.tooltip = '点击查看详细用量信息';
+    statusBarItem.tooltip = '点击打开用量仪表盘';
     statusBarItem.command = 'deepseek-usage.showUsage';
 
     // 初始化各模块
     const balanceMonitor = new BalanceMonitor(context);
+    const usageMonitor = new UsageMonitor(context);
 
-    // 注入限流回调：遇到 429 时通知 scheduler 自适应退避
+    // 注入限流回调
     balanceMonitor.onRateLimit = () => scheduler?.handleRateLimit();
 
-    const refreshCallback = async () => {
-        await updateStatusBar(balanceMonitor);
+    // 注入 Token 过期回调
+    usageMonitor.onTokenExpired = () => {
+        vscode.window.showWarningMessage(
+            'DeepSeek 平台 Token 已过期，请重新配置',
+            '配置 Token'
+        ).then(s => {
+            if (s === '配置 Token') {
+                vscode.commands.executeCommand('deepseek-usage.setPlatformToken');
+            }
+        });
     };
 
     const config = vscode.workspace.getConfiguration('deepseek');
 
     // 首次激活引导：API Key 未配置时弹欢迎提示
-    const apiKey = config.get('apiKey') || '';
+    const apiKey: string = config.get<string>('apiKey') || '';
     if (!apiKey) {
         vscode.window.showInformationMessage(
             '🔑 DeepSeek Usage Monitor：请先配置 API Key 以查看余额',
@@ -40,6 +51,21 @@ export function activate(context: vscode.ExtensionContext) {
         });
     }
 
+    // 刷新回调：scheduler 定时触发
+    const refreshCallback = async () => {
+        // Step 1: 先刷新数据（各自内部判断缓存是否过期）
+        await balanceMonitor.refreshBalance();
+        await usageMonitor.refresh();
+
+        // Step 2: 更新状态栏
+        await updateStatusBar(balanceMonitor, usageMonitor);
+
+        // Step 3: 如果面板已打开，同步更新面板视图
+        if (UsageDashboardPanel.currentPanel) {
+            UsageDashboardPanel.currentPanel.refreshView();
+        }
+    };
+
     // 启动自动刷新调度
     const interval = config.get('autoRefreshInterval', 30);
     scheduler = new RefreshScheduler(refreshCallback, interval);
@@ -48,7 +74,7 @@ export function activate(context: vscode.ExtensionContext) {
     // 初始更新
     refreshCallback();
 
-    // 监听配置变更（注册到 context 确保插件停用时自动清理）
+    // 监听配置变更
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(async (event) => {
             if (event.affectsConfiguration('deepseek.autoRefreshInterval')) {
@@ -62,31 +88,54 @@ export function activate(context: vscode.ExtensionContext) {
     // 注册命令
     context.subscriptions.push(
         statusBarItem,
-        vscode.commands.registerCommand('deepseek-usage.showUsage', async () => {
-            // 点击状态栏时先强制拉取最新余额，再弹窗
-            await balanceMonitor.forceRefreshBalance();
-            showUsageDetails(balanceMonitor);
+        vscode.commands.registerCommand('deepseek-usage.setPlatformToken', async () => {
+            const token = await vscode.window.showInputBox({
+                prompt: '粘贴 DeepSeek 开放平台的 Bearer Token',
+                password: true,
+                placeHolder: '从浏览器 DevTools → Network 中复制 authorization 头的值',
+                ignoreFocusOut: true,
+            });
+            if (token) {
+                await usageMonitor.storeToken(token);
+                await usageMonitor.forceRefresh();
+                await updateStatusBar(balanceMonitor, usageMonitor);
+                vscode.window.showInformationMessage('✅ 平台 Token 已保存，用量数据已更新');
+            }
+        }),
+        vscode.commands.registerCommand('deepseek-usage.clearPlatformToken', async () => {
+            await usageMonitor.clearToken();
+            await updateStatusBar(balanceMonitor, usageMonitor);
+            vscode.window.showInformationMessage('已清除平台 Token');
+        }),
+        vscode.commands.registerCommand('deepseek-usage.showUsage', () => {
+            UsageDashboardPanel.createOrShow(context, balanceMonitor, usageMonitor);
         }),
         vscode.commands.registerCommand('deepseek-usage.refresh', async () => {
             await balanceMonitor.forceRefreshBalance();
-            await updateStatusBar(balanceMonitor);
-        })
+            await usageMonitor.forceRefresh();
+            await updateStatusBar(balanceMonitor, usageMonitor);
+            if (UsageDashboardPanel.currentPanel) {
+                UsageDashboardPanel.currentPanel.refreshView();
+            }
+        }),
     );
 }
 
 export function deactivate() {
     scheduler?.stop();
+    UsageDashboardPanel.currentPanel?.dispose();
 }
 
 async function updateStatusBar(
-    balanceMonitor: BalanceMonitor
+    balanceMonitor: BalanceMonitor,
+    usageMonitor?: UsageMonitor,
 ): Promise<void> {
     try {
         const balance = await balanceMonitor.refreshBalance();
         const config = vscode.workspace.getConfiguration('deepseek');
-        const apiKey = config.get('apiKey') || '';
+        const apiKey: string = config.get<string>('apiKey') || '';
 
-        // API Key 未配置时显示提示，而非 ¥0.00 造成困惑
+        // API Key 未配置时显示提示
         if (!apiKey) {
             statusBarItem.text = `$(key) DeepSeek: 未配置`;
             statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
@@ -98,6 +147,15 @@ async function updateStatusBar(
         // 格式化显示
         const icon = balance > 50 ? 'rocket' : (balance > 10 ? 'info' : 'alert');
         let statusText = `$(${icon}) DeepSeek: ¥${balance.toFixed(2)}`;
+
+        // Token 已配置且数据有效时，追加月消费
+        if (usageMonitor?.hasToken && usageMonitor.cachedData && usageMonitor.cachedData.totalCost > 0) {
+            const cost = usageMonitor.cachedData.totalCost;
+            const costStr = cost >= 10000
+                ? `¥${(cost / 10000).toFixed(2)}万`
+                : `¥${cost.toFixed(2)}`;
+            statusText += ' | ' + costStr;
+        }
 
         // 余额不足时改变颜色
         if (balance < 10) {
@@ -117,40 +175,4 @@ async function updateStatusBar(
         statusBarItem.tooltip = '无法获取余额，稍后重试';
         statusBarItem.show();
     }
-}
-
-function showUsageDetails(
-    balanceMonitor: BalanceMonitor
-): void {
-    const config = vscode.workspace.getConfiguration('deepseek');
-    const balance = balanceMonitor.currentBalance;
-    const apiKey = config.get('apiKey') || '';
-    const isCache = balanceMonitor.isBalanceFromCache;
-
-    const lowBalance = balance <= 10 && !!apiKey;
-
-    const balanceLine = isCache
-        ? `- 当前余额：¥${balance.toFixed(2)}（${lowBalance ? '⚠️ ' : ''}缓存，可能非实时）`
-        : `- 当前余额：${lowBalance ? '⚠️ ' : ''}¥${balance.toFixed(2)}`;
-
-    const keyLine = apiKey
-        ? `- API Key：...${apiKey.slice(-8)}`
-        : `- API Key：未配置 ⚠️ 余额来自上次缓存`;
-
-    const message = `
-📊 **DeepSeek 账户详情**
-
-💰 **余额信息**
-${balanceLine}
-${keyLine}
-
-💡 **提示**：余额每 ${config.get('autoRefreshInterval', 30)} 分钟自动刷新，也可点击下方「刷新」按钮手动更新
-    `;
-
-    vscode.window.showInformationMessage(message, { modal: true }, '刷新')
-        .then(selection => {
-            if (selection === '刷新') {
-                vscode.commands.executeCommand('deepseek-usage.refresh');
-            }
-        });
 }

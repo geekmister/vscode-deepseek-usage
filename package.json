@@ -41,11 +41,19 @@
         "commands": [
             {
                 "command": "deepseek-usage.showUsage",
-                "title": "DeepSeek: Show Usage Details"
+                "title": "DeepSeek: 打开用量仪表盘"
             },
             {
                 "command": "deepseek-usage.refresh",
-                "title": "DeepSeek: Refresh Usage Data"
+                "title": "DeepSeek: 刷新数据"
+            },
+            {
+                "command": "deepseek-usage.setPlatformToken",
+                "title": "DeepSeek: 设置平台 Token（用量统计）"
+            },
+            {
+                "command": "deepseek-usage.clearPlatformToken",
+                "title": "DeepSeek: 清除平台 Token"
             }
         ]
     },
