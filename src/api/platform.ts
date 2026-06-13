@@ -80,7 +80,11 @@ export class PlatformClient {
         return null;
       }
       return res.data.data.biz_data;
-    } catch (error) {
+    } catch (error: any) {
+      // 401/403 错误让上层处理（触发 onTokenExpired 等），其他错误吞掉返回 null
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        throw error;
+      }
       console.error('fetchUsageAmount error:', error);
       return null;
     }
@@ -97,7 +101,11 @@ export class PlatformClient {
         return null;
       }
       return res.data.data.biz_data[0];
-    } catch (error) {
+    } catch (error: any) {
+      // 401/403 错误让上层处理，其他错误吞掉返回 null
+      if (error.response?.status === 401 || error.response?.status === 403) {
+        throw error;
+      }
       console.error('fetchUsageCost error:', error);
       return null;
     }

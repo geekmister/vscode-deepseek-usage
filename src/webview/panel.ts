@@ -77,8 +77,7 @@ export class UsageDashboardPanel {
 
   /** 对外暴露：供 scheduler 回调调用，刷新面板数据 */
   public async refreshView(): Promise<void> {
-    // scheduler 刷新当前月时，清除历史月份视图缓存
-    this._viewCache = null;
+    // 不主动清除 _viewCache：如果用户在查看历史月份，缓存不应被破坏
     const cache = this.usageMonitor.cachedData;
     // 仅当缓存月份与面板当前选中月份一致时才刷新视图
     if (cache && cache.month === this._currentMonth && cache.year === this._currentYear) {
