@@ -24,16 +24,9 @@ export function activate(context: vscode.ExtensionContext) {
     // 注入限流回调
     balanceMonitor.onRateLimit = () => scheduler?.handleRateLimit();
 
-    // 注入 Token 过期回调
+    // 注入 Token 过期回调（APIErrorHandler 已处理用户通知，此回调用于额外副作用）
     usageMonitor.onTokenExpired = () => {
-        vscode.window.showWarningMessage(
-            'DeepSeek 平台 Token 已过期，请重新配置',
-            '配置 Token'
-        ).then(s => {
-            if (s === '配置 Token') {
-                vscode.commands.executeCommand('deepseek-usage.setPlatformToken');
-            }
-        });
+        console.warn('DeepSeek 平台 Token 已过期');
     };
 
     const config = vscode.workspace.getConfiguration('deepseek');

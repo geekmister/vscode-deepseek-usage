@@ -3,12 +3,11 @@ import {
   PlatformClient,
   UsageAmountData,
   UsageCostData,
-  UsageItem,
   ModelUsage,
   sumUsage,
   sumChargeable,
-  getModelUsage,
 } from '../api/platform';
+import { APIErrorHandler } from '../error/handler';
 
 // ==================== 缓存数据类型 ====================
 
@@ -140,9 +139,8 @@ export class UsageMonitor {
       if (!amount) return null;
       return this._buildCache(amount, cost);
     } catch (error: any) {
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        this.onTokenExpired?.();
-      }
+      void APIErrorHandler.handle(error, this.context, { source: 'platform' });
+      this.onTokenExpired?.();
       return null;
     }
   }
@@ -155,9 +153,7 @@ export class UsageMonitor {
       if (!amount) return null;
       return this._buildCache(amount, cost);
     } catch (error: any) {
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        this.onTokenExpired?.();
-      }
+      void APIErrorHandler.handle(error, this.context, { source: 'platform' });
       return null;
     }
   }
