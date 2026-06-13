@@ -9,6 +9,7 @@ export class UsageDashboardPanel {
   private _disposables: vscode.Disposable[] = [];
   private _currentMonth: number;
   private _currentYear: number;
+  private _viewCache: UsageCache | null = null; // 存储当前视图中显示的数据（可能为历史月份）
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -45,9 +46,6 @@ export class UsageDashboardPanel {
     balanceMonitor: BalanceMonitor,
     usageMonitor: UsageMonitor,
   ) {
-    // 打开面板前先同步刷新一次数据
-    await balanceMonitor.forceRefreshBalance();
-    await usageMonitor.forceRefresh();
     const column = vscode.window.activeTextEditor?.viewColumn || vscode.ViewColumn.One;
 
     if (UsageDashboardPanel.currentPanel) {
@@ -55,6 +53,10 @@ export class UsageDashboardPanel {
       await UsageDashboardPanel.currentPanel._refresh();
       return;
     }
+
+    // 首次打开面板前先同步刷新数据
+    await balanceMonitor.forceRefreshBalance();
+    await usageMonitor.forceRefresh();
 
     const panel = vscode.window.createWebviewPanel(
       'deepseekUsageDashboard',
@@ -75,9 +77,10 @@ export class UsageDashboardPanel {
 
   /** 对外暴露：供 scheduler 回调调用，刷新面板数据 */
   public async refreshView(): Promise<void> {
-    // 仅当缓存月份与面板当前选中月份一致时才刷新视图
-    // 防止 scheduler 刷新当前月时覆盖历史月份面板显示
+    // scheduler 刷新当前月时，清除历史月份视图缓存
+    this._viewCache = null;
     const cache = this.usageMonitor.cachedData;
+    // 仅当缓存月份与面板当前选中月份一致时才刷新视图
     if (cache && cache.month === this._currentMonth && cache.year === this._currentYear) {
       await this._render();
     }
@@ -86,7 +89,8 @@ export class UsageDashboardPanel {
   private async _refresh() {
     await this.balanceMonitor.forceRefreshBalance();
     await this.usageMonitor.forceRefresh();
-    // forceRefresh 总是获取当前月数据，同步更新面板月份
+    // 切换到当前月，清除历史视图缓存
+    this._viewCache = null;
     const now = new Date();
     this._currentMonth = now.getMonth() + 1;
     this._currentYear = now.getFullYear();
@@ -95,8 +99,10 @@ export class UsageDashboardPanel {
 
   private async _refreshMonth(m: number, y: number) {
     const result = await this.usageMonitor.refreshMonth(m, y);
-    // 仅当刷新成功时才更新面板月份（失败时保持旧月份避免数据月份不匹配）
     if (result) {
+      // refreshMonth 已返回历史月份数据，但 _cache 可能仍是当前月
+      // 将结果存入 _viewCache 供 _render 使用
+      this._viewCache = result;
       this._currentMonth = m;
       this._currentYear = y;
     }
@@ -105,7 +111,8 @@ export class UsageDashboardPanel {
 
   private async _render() {
     const balance = this.balanceMonitor.currentBalance;
-    const usage = this.usageMonitor.cachedData;
+    // _viewCache 优先（历史月份），其次 usageMonitor.cachedData（当前月）
+    const usage = this._viewCache || this.usageMonitor.cachedData;
     this._panel.webview.html = generateHTML({
       balance,
       usage,

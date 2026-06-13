@@ -202,10 +202,12 @@ export class UsageMonitor {
       cachedAt: Date.now(),
     };
 
-    this._cache = cache;
-    // 仅当前月数据写入持久化缓存，防止历史月份数据干扰自动刷新
+    // 仅当前月数据写入持久化缓存（_cache + globalState）
+    // 历史月份只返回结果，不覆写 _cache 以免影响状态栏自动刷新
+    // panel.ts 通过 refreshMonth 的返回值而非 this._cache 来渲染历史月份
     const now = new Date();
     if (month === now.getMonth() + 1 && year === now.getFullYear()) {
+      this._cache = cache;
       await this.context.globalState.update('cachedUsageData', cache);
     }
     return cache;
