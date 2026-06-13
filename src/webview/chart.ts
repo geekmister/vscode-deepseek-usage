@@ -13,19 +13,23 @@ export interface ChartDataPoint {
 
 /**
  * 生成 Chart.js 柱状图初始化 JS 代码字符串
+ * 图表颜色通过运行时的 `getComputedStyle(document.body).color` 自动适配 VS Code 主题。
  */
 export function generateChartJS(
   data: ChartDataPoint[],
-  isDark: boolean,
 ): string {
   const labels = data.map(d => d.date.slice(5)); // "06-01"
   const tokenValues = data.map(d => d.tokens);
   const costValues = data.map(d => d.cost);
 
-  const textColor = isDark ? '#cccccc' : '#333333';
-  const gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
-
   return `
+    // 从 VS Code CSS 变量动态获取主题色
+    const bodyStyle = getComputedStyle(document.body);
+    const fgColor = bodyStyle.color;
+    const isDark = parseInt(fgColor.slice(1,3), 16) < 128;
+    const tc = isDark ? '#cccccc' : '#333333';
+    const gc = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+
     const ctx = document.getElementById('usageChart').getContext('2d');
     new Chart(ctx, {
       type: 'bar',
@@ -55,18 +59,13 @@ export function generateChartJS(
       options: {
         responsive: true,
         maintainAspectRatio: false,
-        interaction: {
-          mode: 'index',
-          intersect: false,
-        },
+        interaction: { mode: 'index', intersect: false },
         plugins: {
-          legend: {
-            labels: { color: '${textColor}', font: { size: 12 } },
-          },
+          legend: { labels: { color: tc, font: { size: 12 } } },
           tooltip: {
-            backgroundColor: 'rgba(30, 30, 30, 0.95)',
-            titleColor: '#ffffff',
-            bodyColor: '#cccccc',
+            backgroundColor: 'rgba(30,30,30,0.95)',
+            titleColor: '#fff',
+            bodyColor: '#ccc',
             borderColor: 'rgba(255,255,255,0.1)',
             borderWidth: 1,
             cornerRadius: 6,
@@ -75,32 +74,20 @@ export function generateChartJS(
         },
         scales: {
           x: {
-            ticks: { color: '${textColor}', maxRotation: 45 },
-            grid: { color: '${gridColor}' },
+            ticks: { color: tc, maxRotation: 45 },
+            grid: { color: gc },
           },
           y: {
-            type: 'linear',
-            display: true,
-            position: 'left',
-            ticks: { color: '${textColor}' },
-            grid: { color: '${gridColor}' },
-            title: {
-              display: true,
-              text: 'Token',
-              color: '${textColor}',
-            },
+            type: 'linear', display: true, position: 'left',
+            ticks: { color: tc },
+            grid: { color: gc },
+            title: { display: true, text: 'Token', color: tc },
           },
           y1: {
-            type: 'linear',
-            display: true,
-            position: 'right',
-            ticks: { color: '${textColor}' },
+            type: 'linear', display: true, position: 'right',
+            ticks: { color: tc },
             grid: { drawOnChartArea: false },
-            title: {
-              display: true,
-              text: '费用 (¥)',
-              color: '${textColor}',
-            },
+            title: { display: true, text: '费用 (¥)', color: tc },
           },
         },
       },

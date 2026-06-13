@@ -38,6 +38,7 @@ export class UsageMonitor {
   private _client: PlatformClient | null = null;
   private _cache: UsageCache | null = null;
   private _hasToken: boolean = false;
+  private _initPromise: Promise<void> | null = null;
 
   // 注入：Token 过期时由 extension.ts 处理
   onTokenExpired: (() => void) | undefined;
@@ -46,7 +47,7 @@ export class UsageMonitor {
     this.context = context;
     this._cache = context.globalState.get<UsageCache | null>('cachedUsageData', null);
     // 不阻塞构造，惰性初始化
-    this._initClient();
+    this._initPromise = this._initClient();
   }
 
   // ===== 读取缓存 =====
@@ -124,6 +125,11 @@ export class UsageMonitor {
   }
 
   private async _getClient(): Promise<PlatformClient | null> {
+    // 等待 init 完成（构造函数中 _initClient 未 await）
+    if (this._initPromise) {
+      await this._initPromise;
+      this._initPromise = null;
+    }
     return this._client;
   }
 
@@ -132,12 +138,11 @@ export class UsageMonitor {
     if (!client) return null;
     try {
       const now = new Date();
-      const { amount, cost } = await client.fetchMonth(
-        now.getMonth() + 1,
-        now.getFullYear(),
-      );
+      const month = now.getMonth() + 1;
+      const year = now.getFullYear();
+      const { amount, cost } = await client.fetchMonth(month, year);
       if (!amount) return null;
-      return this._buildCache(amount, cost);
+      return this._buildCache(amount, cost, month, year);
     } catch (error: any) {
       void APIErrorHandler.handle(error, this.context, { source: 'platform' });
       this.onTokenExpired?.();
@@ -151,9 +156,10 @@ export class UsageMonitor {
     try {
       const { amount, cost } = await client.fetchMonth(m, y);
       if (!amount) return null;
-      return this._buildCache(amount, cost);
+      return this._buildCache(amount, cost, m, y);
     } catch (error: any) {
       void APIErrorHandler.handle(error, this.context, { source: 'platform' });
+      this.onTokenExpired?.();
       return null;
     }
   }
@@ -161,16 +167,19 @@ export class UsageMonitor {
   private async _buildCache(
     amount: UsageAmountData,
     cost: UsageCostData | null,
+    month: number,
+    year: number,
   ): Promise<UsageCache> {
     // 按模型拆解
-    const modelBreakdown: UsageCache['modelBreakdown'] = amount.total.map(m => ({
-      model: m.model,
-      tokens: sumChargeable([m]),
-      requests: sumUsage([m], 'REQUEST'),
-      cost: cost
-        ? sumChargeable([cost.total.find(c => c.model === m.model)!].filter(Boolean) as ModelUsage[])
-        : 0,
-    }));
+    const modelBreakdown: UsageCache['modelBreakdown'] = amount.total.map(m => {
+      const costModel = cost?.total.find(c => c.model === m.model);
+      return {
+        model: m.model,
+        tokens: sumChargeable([m]),
+        requests: sumUsage([m], 'REQUEST'),
+        cost: costModel ? sumChargeable([costModel]) : 0,
+      };
+    });
 
     // 按天拆解
     const dailyData: UsageCache['dailyData'] = amount.days.map(d => ({
@@ -187,8 +196,8 @@ export class UsageMonitor {
       totalCost: cost ? sumChargeable(cost.total) : 0,
       modelBreakdown,
       dailyData,
-      month: new Date().getMonth() + 1,
-      year: new Date().getFullYear(),
+      month,
+      year,
       cachedAt: Date.now(),
     };
 

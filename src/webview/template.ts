@@ -11,17 +11,16 @@ export interface GenerateHTMLData {
 
 export function generateHTML(data: GenerateHTMLData): string {
   const { balance, usage, month, year } = data;
-  const isDark = true; // 跟随 VS Code 主题，CSS 变量会自动适配
   const hasUsage = usage && usage.totalTokens > 0;
 
-  // 准备图表数据
+  // 准备图表数据（颜色由 Chart.js 在运行时时通过 getComputedStyle 动态适配主题）
   const chartDataPoints: ChartDataPoint[] =
     (usage?.dailyData || [])
       .filter(d => d.totalTokens > 0 || d.totalCost > 0)
       .slice(-31)
       .map(d => ({ date: d.date, tokens: d.totalTokens, cost: d.totalCost }));
   const chartJS = chartDataPoints.length > 1
-    ? generateChartJS(chartDataPoints, isDark)
+    ? generateChartJS(chartDataPoints)
     : '';
 
   // 统计卡片
