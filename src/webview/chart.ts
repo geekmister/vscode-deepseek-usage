@@ -24,9 +24,11 @@ export function generateChartJS(
 
   return `
     // 从 VS Code CSS 变量动态获取主题色
+    // getComputedStyle 返回 rgb(r,g,b) 或 rgba(r,g,b,a) 格式
     const bodyStyle = getComputedStyle(document.body);
     const fgColor = bodyStyle.color;
-    const isDark = parseInt(fgColor.slice(1,3), 16) < 128;
+    const r = parseInt(fgColor.match(/\\d+/)?.[0] || '128');
+    const isDark = r > 128; // 浅色文字 → 深色主题
     const tc = isDark ? '#cccccc' : '#333333';
     const gc = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
 

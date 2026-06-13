@@ -87,15 +87,15 @@ export class UsageMonitor {
 
   // ===== 刷新策略 =====
 
-  /** 自动刷新（缓存 30min 有效则跳过） */
+  /** 自动刷新（缓存 30min 有效则跳过，仅对当前月有效） */
   async refresh(): Promise<UsageCache | null> {
-    if (this.isCacheValid()) {
+    if (this.isCacheValid() && this._isCurrentMonth()) {
       return this._cache;
     }
     return this._forceRefresh();
   }
 
-  /** 强制刷新 */
+  /** 强制刷新（总是获取当前月数据） */
   async forceRefresh(): Promise<UsageCache | null> {
     return this._forceRefresh();
   }
@@ -122,6 +122,13 @@ export class UsageMonitor {
   private isCacheValid(): boolean {
     if (!this._cache) return false;
     return Date.now() - this._cache.cachedAt < 30 * 60 * 1000; // 30 分钟
+  }
+
+  /** 检查缓存月份是否为当前月 */
+  private _isCurrentMonth(): boolean {
+    if (!this._cache) return false;
+    const now = new Date();
+    return this._cache.month === now.getMonth() + 1 && this._cache.year === now.getFullYear();
   }
 
   private async _getClient(): Promise<PlatformClient | null> {
