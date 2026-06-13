@@ -145,14 +145,6 @@ export function sumUsage(data: ModelUsage[], type: UsageType): number {
   }, 0);
 }
 
-/** 获取某模型的某 type 数值 */
-export function getModelUsage(data: ModelUsage[], model: string, type: UsageType): number {
-  const m = data.find(x => x.model === model);
-  if (!m) return 0;
-  const item = m.usage.find(u => u.type === type);
-  return item ? parseFloat(item.amount) : 0;
-}
-
 /**
  * 统计可计费量（缓存命中 + 缓存未命中 + 输出）
  * 注意：amount 接口传入时得到 Token 数，cost 接口传入时得到金额（元），逻辑相同

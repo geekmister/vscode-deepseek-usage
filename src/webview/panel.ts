@@ -75,7 +75,12 @@ export class UsageDashboardPanel {
 
   /** 对外暴露：供 scheduler 回调调用，刷新面板数据 */
   public async refreshView(): Promise<void> {
-    await this._render();
+    // 仅当缓存月份与面板当前选中月份一致时才刷新视图
+    // 防止 scheduler 刷新当前月时覆盖历史月份面板显示
+    const cache = this.usageMonitor.cachedData;
+    if (cache && cache.month === this._currentMonth && cache.year === this._currentYear) {
+      await this._render();
+    }
   }
 
   private async _refresh() {
@@ -85,9 +90,12 @@ export class UsageDashboardPanel {
   }
 
   private async _refreshMonth(m: number, y: number) {
-    this._currentMonth = m;
-    this._currentYear = y;
-    await this.usageMonitor.refreshMonth(m, y);
+    const result = await this.usageMonitor.refreshMonth(m, y);
+    // 仅当刷新成功时才更新面板月份（失败时保持旧月份避免数据月份不匹配）
+    if (result) {
+      this._currentMonth = m;
+      this._currentYear = y;
+    }
     await this._render();
   }
 

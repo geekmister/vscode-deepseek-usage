@@ -92,7 +92,9 @@ export class UsageMonitor {
     if (this.isCacheValid() && this._isCurrentMonth()) {
       return this._cache;
     }
-    return this._forceRefresh();
+    // 自动刷新只更新当前月，不覆盖历史月份缓存
+    const now = new Date();
+    return this._forceRefreshMonth(now.getMonth() + 1, now.getFullYear());
   }
 
   /** 强制刷新（总是获取当前月数据） */

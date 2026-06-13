@@ -34,8 +34,10 @@ export function generateHTML(data: GenerateHTMLData): string {
   if (usage?.modelBreakdown) {
     for (const m of usage.modelBreakdown) {
       if (m.tokens === 0 && m.requests === 0) continue;
+      // 编码模型名防止 & ' 等字符破坏 HTML
+      const safeModel = m.model.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
       modelRows += `
-        <tr onclick="toggleDetail('${m.model}')">
+        <tr onclick="toggleDetail('${safeModel}')">
           <td>${m.model}</td>
           <td class="num">${formatTokens(m.tokens)}</td>
           <td class="num">${formatTokens(m.requests)}</td>
