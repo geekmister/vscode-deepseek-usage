@@ -86,6 +86,10 @@ export class UsageDashboardPanel {
   private async _refresh() {
     await this.balanceMonitor.forceRefreshBalance();
     await this.usageMonitor.forceRefresh();
+    // forceRefresh 总是获取当前月数据，同步更新面板月份
+    const now = new Date();
+    this._currentMonth = now.getMonth() + 1;
+    this._currentYear = now.getFullYear();
     await this._render();
   }
 

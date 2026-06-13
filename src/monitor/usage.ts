@@ -147,20 +147,8 @@ export class UsageMonitor {
   }
 
   private async _forceRefresh(): Promise<UsageCache | null> {
-    const client = await this._getClient();
-    if (!client) return null;
-    try {
-      const now = new Date();
-      const month = now.getMonth() + 1;
-      const year = now.getFullYear();
-      const { amount, cost } = await client.fetchMonth(month, year);
-      if (!amount) return null;
-      return this._buildCache(amount, cost, month, year);
-    } catch (error: any) {
-      void APIErrorHandler.handle(error, this.context, { source: 'platform' });
-      this.onTokenExpired?.();
-      return null;
-    }
+    const now = new Date();
+    return this._forceRefreshMonth(now.getMonth() + 1, now.getFullYear());
   }
 
   private async _forceRefreshMonth(m: number, y: number): Promise<UsageCache | null> {
@@ -215,7 +203,11 @@ export class UsageMonitor {
     };
 
     this._cache = cache;
-    await this.context.globalState.update('cachedUsageData', cache);
+    // 仅当前月数据写入持久化缓存，防止历史月份数据干扰自动刷新
+    const now = new Date();
+    if (month === now.getMonth() + 1 && year === now.getFullYear()) {
+      await this.context.globalState.update('cachedUsageData', cache);
+    }
     return cache;
   }
 }
