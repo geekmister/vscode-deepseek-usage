@@ -364,9 +364,12 @@ export function generateHTML(data: GenerateHTMLData): string {
   </div>
   ` : `
   <div class="empty-state">
-    <div class="icon">📊</div>
+    <div class="icon">�</div>
     <p>暂无用量数据</p>
-    <p style="font-size:12px;margin-top:8px;">请先配置平台 Token 并刷新</p>
+    <p style="font-size:12px;margin-top:8px;opacity:0.7">请先配置平台 Token：</p>
+    <p style="font-size:12px;margin-top:4px;opacity:0.6">1. 登录 platform.deepseek.com</p>
+    <p style="font-size:12px;opacity:0.6">2. F12 → Network → 复制 authorization 头的值</p>
+    <p style="font-size:12px;opacity:0.6">3. Ctrl+Shift+P → 「DeepSeek: 设置平台 Token」</p>
   </div>
   `}
 

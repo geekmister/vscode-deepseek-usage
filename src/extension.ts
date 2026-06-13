@@ -7,7 +7,7 @@ import { UsageDashboardPanel } from './webview/panel';
 let statusBarItem: vscode.StatusBarItem;
 let scheduler: RefreshScheduler | undefined;
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
     // 创建状态栏项
     statusBarItem = vscode.window.createStatusBarItem(
         vscode.StatusBarAlignment.Right,
@@ -31,17 +31,21 @@ export function activate(context: vscode.ExtensionContext) {
 
     const config = vscode.workspace.getConfiguration('deepseek');
 
-    // 首次激活引导：API Key 未配置时弹欢迎提示
-    const apiKey: string = config.get<string>('apiKey') || '';
-    if (!apiKey) {
-        vscode.window.showInformationMessage(
-            '🔑 DeepSeek Usage Monitor：请先配置 API Key 以查看余额',
-            '配置 API Key'
-        ).then(selection => {
-            if (selection === '配置 API Key') {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'deepseek.apiKey');
-            }
-        });
+    // 首次激活两步向导（仅弹一次）
+    const hasShownWelcome = context.globalState.get<boolean>('hasShownWelcome', false);
+    if (!hasShownWelcome) {
+        context.globalState.update('hasShownWelcome', true);
+        const action = await vscode.window.showInformationMessage(
+            '🔑 DeepSeek Usage Monitor：需配置 API Key 查余额 + 平台 Token 查用量统计',
+            '配置 API Key',
+            '配置 Token',
+            '知道了'
+        );
+        if (action === '配置 API Key') {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'deepseek.apiKey');
+        } else if (action === '配置 Token') {
+            vscode.commands.executeCommand('deepseek-usage.setPlatformToken');
+        }
     }
 
     // 刷新回调：scheduler 定时触发
@@ -74,6 +78,9 @@ export function activate(context: vscode.ExtensionContext) {
                 const newInterval = vscode.workspace.getConfiguration('deepseek')
                     .get('autoRefreshInterval', 30);
                 scheduler?.updateInterval(newInterval);
+            }
+            if (event.affectsConfiguration('deepseek.apiKey')) {
+                await updateStatusBar(balanceMonitor, usageMonitor);
             }
         })
     );
@@ -150,6 +157,21 @@ async function updateStatusBar(
                 : `¥${cost.toFixed(2)}`;
             statusText += ' | ' + costStr;
         }
+
+        // 构建 Tooltip 提示缺失配置项
+        const tooltipLines: string[] = [];
+        tooltipLines.push(`余额: ¥${balance.toFixed(2)}`);
+        if (usageMonitor?.hasToken && usageMonitor.cachedData) {
+            tooltipLines.push(`月消费: ¥${usageMonitor.cachedData.totalCost.toFixed(2)}`);
+        }
+        tooltipLines.push('点击打开用量仪表盘');
+        if (!apiKey) {
+            tooltipLines.push('⚠️ 未配置 API Key → 设置中搜索 deepseek.apiKey');
+        }
+        if (!usageMonitor?.hasToken) {
+            tooltipLines.push('⚠️ 未配置平台 Token → 命令面板搜索「DeepSeek」');
+        }
+        statusBarItem.tooltip = tooltipLines.join('\n');
 
         // 余额不足时改变颜色
         if (balance < 10) {
