@@ -1,15 +1,26 @@
 {
-    "name": "deepseek-usage-monitor",
+    "name": "vscode-deepseek-usage",
     "displayName": "DeepSeek Usage Monitor",
-    "publisher": "geekmister",
-    "version": "0.1.0",
-    "description": "监控 DeepSeek API 账户余额的 VSCode 插件",
+    "publisher": "Geekmister",
+    "version": "1.0.0",
+    "description": "Monitor DeepSeek API balance, token usage and costs — with QuickPick preview and Chart.js dashboard",
     "license": "MIT",
+    "icon": "icon.png",
     "engines": {
         "vscode": "^1.90.0"
     },
     "categories": [
+        "Visualization",
+        "Data Science",
         "Other"
+    ],
+    "keywords": [
+        "DeepSeek",
+        "token usage",
+        "API monitor",
+        "balance",
+        "cost tracking",
+        "dashboard"
     ],
     "activationEvents": [
         "onStartupFinished"
@@ -64,7 +75,8 @@
     "scripts": {
         "vscode:prepublish": "npm run build",
         "build": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --minify",
-        "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap"
+        "watch": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+        "package": "vsce package"
     },
     "dependencies": {
         "axios": "^1.7.0"

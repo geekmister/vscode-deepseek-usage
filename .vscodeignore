@@ -1,6 +1,12 @@
 .vscode/**
+.vscode-test/**
+.codeartsdoer/**
 src/**
 node_modules/**
 .gitignore
 tsconfig.json
+docs/**
+demo.png
+demo-monitor.png
+**/*.ts
 **/*.map
