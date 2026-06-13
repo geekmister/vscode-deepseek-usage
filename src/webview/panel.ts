@@ -33,6 +33,49 @@ export class UsageDashboardPanel {
           case 'copy':
             vscode.env.clipboard.writeText(msg.text);
             break;
+          case 'setApiKey': {
+            const key = await vscode.window.showInputBox({
+              prompt: '输入 DeepSeek API Key',
+              password: true,
+              placeHolder: '从 platform.deepseek.com/api_keys 复制',
+              ignoreFocusOut: true,
+            });
+            if (key) {
+              const config = vscode.workspace.getConfiguration('deepseek');
+              await config.update('apiKey', key, vscode.ConfigurationTarget.Global);
+              vscode.window.showInformationMessage('✅ API Key 已保存');
+              await this._refresh();
+            }
+            break;
+          }
+          case 'clearApiKey': {
+            const config = vscode.workspace.getConfiguration('deepseek');
+            await config.update('apiKey', '', vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage('已清除 API Key');
+            await this._refresh();
+            break;
+          }
+          case 'setToken': {
+            const token = await vscode.window.showInputBox({
+              prompt: '粘贴 DeepSeek 开放平台的 Bearer Token',
+              password: true,
+              placeHolder: '从浏览器 DevTools → Network 中复制 authorization 头的值',
+              ignoreFocusOut: true,
+            });
+            if (token) {
+              await this.usageMonitor.storeToken(token);
+              await this.usageMonitor.forceRefresh();
+              vscode.window.showInformationMessage('✅ 平台 Token 已保存，用量数据已更新');
+              await this._render();
+            }
+            break;
+          }
+          case 'clearToken': {
+            await this.usageMonitor.clearToken();
+            vscode.window.showInformationMessage('已清除平台 Token');
+            await this._render();
+            break;
+          }
         }
       },
       null,
@@ -112,11 +155,15 @@ export class UsageDashboardPanel {
     const balance = this.balanceMonitor.currentBalance;
     // _viewCache 优先（历史月份），其次 usageMonitor.cachedData（当前月）
     const usage = this._viewCache || this.usageMonitor.cachedData;
+    const config = vscode.workspace.getConfiguration('deepseek');
+    const hasApiKey = !!(config.get<string>('apiKey'));
     this._panel.webview.html = generateHTML({
       balance,
       usage,
       month: this._currentMonth,
       year: this._currentYear,
+      hasApiKey,
+      hasToken: this.usageMonitor.hasToken,
     });
   }
 

@@ -14,7 +14,7 @@ export async function activate(context: vscode.ExtensionContext) {
         100
     );
     statusBarItem.name = 'DeepSeek Usage Monitor';
-    statusBarItem.tooltip = '点击打开用量仪表盘';
+    statusBarItem.tooltip = '点击打开用量概览';
     statusBarItem.command = 'deepseek-usage.showUsage';
 
     // 初始化各模块
@@ -24,7 +24,7 @@ export async function activate(context: vscode.ExtensionContext) {
     // 注入限流回调
     balanceMonitor.onRateLimit = () => scheduler?.handleRateLimit();
 
-    // 注入 Token 过期回调（APIErrorHandler 已处理用户通知，此回调用于额外副作用）
+    // 注入 Token 过期回调
     usageMonitor.onTokenExpired = () => {
         console.warn('DeepSeek 平台 Token 已过期');
     };
@@ -50,14 +50,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // 刷新回调：scheduler 定时触发
     const refreshCallback = async () => {
-        // Step 1: 先刷新数据（各自内部判断缓存是否过期）
         await balanceMonitor.refreshBalance();
         await usageMonitor.refresh();
-
-        // Step 2: 更新状态栏（直接传最新余额，避免 refreshBalance 二次调用）
         await updateStatusBar(balanceMonitor, usageMonitor, balanceMonitor.currentBalance);
-
-        // Step 3: 如果面板已打开，同步更新面板视图
+        // 编辑器 Tab 面板（如果打开）
         if (UsageDashboardPanel.currentPanel) {
             UsageDashboardPanel.currentPanel.refreshView();
         }
@@ -68,7 +64,7 @@ export async function activate(context: vscode.ExtensionContext) {
     scheduler = new RefreshScheduler(refreshCallback, interval);
     scheduler.start();
 
-    // 初始更新（fire-and-forget，错误由内部捕获）
+    // 初始更新
     refreshCallback().catch(console.error);
 
     // 监听配置变更
@@ -107,7 +103,10 @@ export async function activate(context: vscode.ExtensionContext) {
             await updateStatusBar(balanceMonitor, usageMonitor);
             vscode.window.showInformationMessage('已清除平台 Token');
         }),
-        vscode.commands.registerCommand('deepseek-usage.showUsage', () => {
+        vscode.commands.registerCommand('deepseek-usage.showUsage', async () => {
+            await showQuickPick(balanceMonitor, usageMonitor);
+        }),
+        vscode.commands.registerCommand('deepseek-usage.openDashboard', () => {
             UsageDashboardPanel.createOrShow(context, balanceMonitor, usageMonitor);
         }),
         vscode.commands.registerCommand('deepseek-usage.refresh', async () => {
@@ -126,6 +125,117 @@ export function deactivate() {
     UsageDashboardPanel.currentPanel?.dispose();
 }
 
+// ==================== QuickPick 悬浮面板 ====================
+
+async function showQuickPick(
+    balanceMonitor: BalanceMonitor,
+    usageMonitor: UsageMonitor,
+): Promise<void> {
+    // 先同步刷新数据
+    await balanceMonitor.forceRefreshBalance();
+    await usageMonitor.forceRefresh();
+
+    const balance = balanceMonitor.currentBalance;
+    const usage = usageMonitor.cachedData;
+    const hasToken = usageMonitor.hasToken;
+
+    const items: vscode.QuickPickItem[] = [];
+
+    // ─── 余额 & 消费概要 ───
+    items.push({
+        label: `$(rocket) 余额：¥${balance.toFixed(2)}`,
+        description: '',
+        detail: `缓存更新: ${balanceMonitor.lastUpdated}`,
+    });
+
+    if (usage) {
+        items.push({
+            label: `$(graph) 月消费：¥${usage.totalCost.toFixed(2)}`,
+            description: `Token ${_fmt(usage.totalTokens)}`,
+            detail: `请求 ${_fmt(usage.totalRequests)} 次`,
+        });
+    }
+
+    // ─── 分隔线 ───
+    items.push({ label: '', description: '', detail: '', kind: vscode.QuickPickItemKind.Separator });
+
+    // ─── 模型用量明细 ───
+    if (usage && usage.modelBreakdown.length > 0) {
+        items.push({
+            label: '$(list-tree) 模型用量明细',
+            description: 'Token / 请求 / 费用',
+            detail: '',
+        });
+
+        for (const m of usage.modelBreakdown) {
+            items.push({
+                label: `  ${m.model}`,
+                description: `${_fmt(m.tokens)} Tokens`,
+                detail: `${_fmt(m.requests)} 次 · ¥${m.cost.toFixed(4)}`,
+            });
+        }
+    } else if (!hasToken) {
+        items.push({
+            label: '$(key) 未配置平台 Token',
+            description: '',
+            detail: '执行命令「DeepSeek: 设置平台 Token」以查看用量',
+        });
+    }
+
+    // ─── 分隔线 ───
+    items.push({ label: '', description: '', detail: '', kind: vscode.QuickPickItemKind.Separator });
+
+    // ─── 操作项 ───
+    items.push({
+        label: '$(arrow-right) 打开完整仪表盘',
+        description: '',
+        detail: '在编辑器 Tab 中查看图表和每日明细',
+    });
+    items.push({
+        label: '$(refresh) 刷新数据',
+        description: '',
+        detail: '强制刷新余额和用量数据',
+    });
+    items.push({
+        label: '$(key) 设置平台 Token',
+        description: '',
+        detail: '从 platform.deepseek.com 复制 Bearer Token',
+    });
+
+    const pick = await vscode.window.showQuickPick(items, {
+        title: 'DeepSeek 用量概览',
+        placeHolder: 'Esc 关闭 · 点击「打开完整仪表盘」查看图表',
+        matchOnDescription: true,
+        matchOnDetail: true,
+    });
+
+    if (!pick) return;
+
+    if (pick.label.includes('打开完整仪表盘')) {
+        vscode.commands.executeCommand('deepseek-usage.openDashboard');
+    } else if (pick.label.includes('刷新数据')) {
+        vscode.commands.executeCommand('deepseek-usage.refresh');
+    } else if (pick.label.includes('设置平台 Token')) {
+        vscode.commands.executeCommand('deepseek-usage.setPlatformToken');
+    } else if (pick.label.startsWith('  ')) {
+        // 点击模型行 → 复制模型名
+        const model = pick.label.trim();
+        const desc = pick.description || '';
+        const det = pick.detail || '';
+        const text = `${model}\n${desc}\n${det}`;
+        vscode.env.clipboard.writeText(text);
+        vscode.window.setStatusBarMessage('$(check) 已复制到剪贴板', 2000);
+    }
+}
+
+function _fmt(n: number): string {
+    if (n >= 1_0000_0000) return (n / 1_0000_0000).toFixed(2) + '亿';
+    if (n >= 1_0000) return (n / 1_0000).toFixed(2) + '万';
+    return n.toLocaleString();
+}
+
+// ==================== 状态栏更新 ====================
+
 async function updateStatusBar(
     balanceMonitor: BalanceMonitor,
     usageMonitor?: UsageMonitor,
@@ -136,20 +246,17 @@ async function updateStatusBar(
         const config = vscode.workspace.getConfiguration('deepseek');
         const apiKey: string = config.get<string>('apiKey') || '';
 
-        // API Key 未配置时显示提示
         if (!apiKey) {
             statusBarItem.text = `$(key) DeepSeek: 未配置`;
             statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-            statusBarItem.tooltip = '点击查看详情';
+            statusBarItem.tooltip = '点击打开用量概览';
             statusBarItem.show();
             return;
         }
 
-        // 格式化显示
         const icon = balance > 50 ? 'rocket' : (balance > 10 ? 'info' : 'alert');
         let statusText = `$(${icon}) DeepSeek: ¥${balance.toFixed(2)}`;
 
-        // Token 已配置且数据有效时，追加月消费
         if (usageMonitor?.hasToken && usageMonitor.cachedData && usageMonitor.cachedData.totalCost > 0) {
             const cost = usageMonitor.cachedData.totalCost;
             const costStr = cost >= 10000
@@ -158,13 +265,12 @@ async function updateStatusBar(
             statusText += ' | ' + costStr;
         }
 
-        // 构建 Tooltip 提示缺失配置项
         const tooltipLines: string[] = [];
         tooltipLines.push(`余额: ¥${balance.toFixed(2)}`);
         if (usageMonitor?.hasToken && usageMonitor.cachedData) {
             tooltipLines.push(`月消费: ¥${usageMonitor.cachedData.totalCost.toFixed(2)}`);
         }
-        tooltipLines.push('点击打开用量仪表盘');
+        tooltipLines.push('点击打开用量概览');
         if (!apiKey) {
             tooltipLines.push('⚠️ 未配置 API Key → 设置中搜索 deepseek.apiKey');
         }
@@ -173,7 +279,6 @@ async function updateStatusBar(
         }
         statusBarItem.tooltip = tooltipLines.join('\n');
 
-        // 余额不足时改变颜色
         if (balance < 10) {
             statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         } else {
@@ -183,7 +288,6 @@ async function updateStatusBar(
         statusBarItem.text = statusText;
         statusBarItem.show();
 
-        // 余额检查
         await balanceMonitor.checkAlert(10);
     } catch (error) {
         statusBarItem.text = `$(alert) DeepSeek: API错误`;

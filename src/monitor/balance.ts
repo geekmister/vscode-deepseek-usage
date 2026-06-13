@@ -16,6 +16,12 @@ export class BalanceMonitor {
         return this._currentBalance;
     }
 
+    get lastUpdated(): string {
+        if (this._lastFetchTime === 0) return '暂无';
+        const d = new Date(this._lastFetchTime);
+        return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}:${d.getSeconds().toString().padStart(2, '0')}`;
+    }
+
     // 当前 API Key 为空或缓存未过期时，标记数据来自缓存
     get isBalanceFromCache(): boolean {
         const config = vscode.workspace.getConfiguration('deepseek');

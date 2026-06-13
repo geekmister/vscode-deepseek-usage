@@ -41,7 +41,7 @@
         "commands": [
             {
                 "command": "deepseek-usage.showUsage",
-                "title": "DeepSeek: 打开用量仪表盘"
+                "title": "DeepSeek: 打开用量概览"
             },
             {
                 "command": "deepseek-usage.refresh",
@@ -54,6 +54,10 @@
             {
                 "command": "deepseek-usage.clearPlatformToken",
                 "title": "DeepSeek: 清除平台 Token"
+            },
+            {
+                "command": "deepseek-usage.openDashboard",
+                "title": "DeepSeek: 打开完整仪表盘（编辑器 Tab）"
             }
         ]
     },

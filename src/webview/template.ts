@@ -7,6 +7,8 @@ export interface GenerateHTMLData {
   usage: UsageCache | null;
   month: number;
   year: number;
+  hasApiKey: boolean;
+  hasToken: boolean;
 }
 
 export function generateHTML(data: GenerateHTMLData): string {
@@ -275,6 +277,64 @@ export function generateHTML(data: GenerateHTMLData): string {
       text-align: center;
     }
 
+    /* 设置面板 */
+    .settings-overlay {
+      display: none;
+      margin-bottom: 20px;
+      animation: fadeInUp 0.2s ease;
+    }
+    .settings-overlay.open { display: block; }
+    .settings-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .settings-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+    }
+    .setting-row:last-child { border-bottom: none; }
+    .setting-label {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .setting-label .name { font-size: 13px; font-weight: 500; }
+    .setting-label .desc { font-size: 11px; opacity: 0.5; }
+    .setting-status {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    .setting-status.ok { background: rgba(0, 206, 201, 0.15); color: var(--green); }
+    .setting-status.missing { background: rgba(255, 107, 107, 0.15); color: var(--red); }
+    .setting-actions { display: flex; align-items: center; gap: 6px; }
+    .btn-sm {
+      background: var(--card-bg);
+      color: var(--fg);
+      border: 1px solid var(--card-border);
+      border-radius: 4px;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.15s ease;
+    }
+    .btn-sm:hover { background: rgba(255,255,255,0.08); border-color: var(--accent); }
+    .btn-sm.danger:hover { border-color: var(--red); color: var(--red); }
+
     /* 空状态 */
     .empty-state {
       text-align: center;
@@ -301,6 +361,38 @@ export function generateHTML(data: GenerateHTMLData): string {
         ${generateMonthOptions(month, year)}
       </select>
       <button class="btn" onclick="refresh()">↻ 刷新</button>
+      <button class="btn" onclick="toggleSettings()" style="font-size:15px;padding:6px 10px;" title="设置">⚙</button>
+    </div>
+  </div>
+
+  <!-- 设置面板 -->
+  <div class="settings-overlay" id="settingsPanel">
+    <div class="settings-card">
+      <div class="settings-title">⚙ 设置</div>
+
+      <div class="setting-row">
+        <div class="setting-label">
+          <span class="name">API Key</span>
+          <span class="desc">用于查询账户余额（settings.json 或环境变量）</span>
+        </div>
+        <div class="setting-actions">
+          <span class="setting-status ${data.hasApiKey ? 'ok' : 'missing'}">${data.hasApiKey ? '✓ 已配置' : '✗ 未配置'}</span>
+          <button class="btn-sm" onclick="setApiKey()">${data.hasApiKey ? '修改' : '设置'}</button>
+          ${data.hasApiKey ? '<button class="btn-sm danger" onclick="clearApiKey()">清空</button>' : ''}
+        </div>
+      </div>
+
+      <div class="setting-row">
+        <div class="setting-label">
+          <span class="name">平台 Token</span>
+          <span class="desc">用于查询用量统计（加密存储于系统密钥链）</span>
+        </div>
+        <div class="setting-actions">
+          <span class="setting-status ${data.hasToken ? 'ok' : 'missing'}">${data.hasToken ? '✓ 已配置' : '✗ 未配置'}</span>
+          <button class="btn-sm" onclick="setToken()">${data.hasToken ? '修改' : '设置'}</button>
+          ${data.hasToken ? '<button class="btn-sm danger" onclick="clearToken()">清空</button>' : ''}
+        </div>
+      </div>
     </div>
   </div>
 
@@ -396,6 +488,27 @@ export function generateHTML(data: GenerateHTMLData): string {
 
     function toggleDetail(model) {
       // 预留：展开每日模型详情
+    }
+
+    function toggleSettings() {
+      const panel = document.getElementById('settingsPanel');
+      panel.classList.toggle('open');
+    }
+
+    function setApiKey() {
+      vscode.postMessage({ command: 'setApiKey' });
+    }
+
+    function clearApiKey() {
+      vscode.postMessage({ command: 'clearApiKey' });
+    }
+
+    function setToken() {
+      vscode.postMessage({ command: 'setToken' });
+    }
+
+    function clearToken() {
+      vscode.postMessage({ command: 'clearToken' });
     }
 
     ${chartJS}
