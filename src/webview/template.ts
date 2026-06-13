@@ -38,7 +38,7 @@ export function generateHTML(data: GenerateHTMLData): string {
       const safeModel = m.model.replace(/&/g, '&amp;').replace(/'/g, '&#39;').replace(/"/g, '&quot;');
       modelRows += `
         <tr onclick="toggleDetail('${safeModel}')">
-          <td>${m.model}</td>
+          <td>${safeModel}</td>
           <td class="num">${formatTokens(m.tokens)}</td>
           <td class="num">${formatTokens(m.requests)}</td>
           <td class="num">${formatCost(m.cost)}</td>
